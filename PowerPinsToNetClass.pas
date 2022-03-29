@@ -6,7 +6,7 @@ Var
     i, PinType      : Integer;
     PinFullString : String;
     PinDesignator : String;
-    PinName, Desc, NetName, CmpName    : String;
+    PinName, Desc, CmpName    : String;
     PinLocation   : TLocation;
     PowerDesignators: TStringList;
 Begin
@@ -22,13 +22,12 @@ Begin
         While pin <> Nil Do
         Begin
             PinDesignator := pin.Designator;
-            PinName := pin.Name;
+            //PinName := pin.Name;
             PinType := pin.Electrical;
             Desc := pin.Description;
-            NetName := pin.HiddenNetName;
             if PinType = eCC_PinPower then
             begin
-                PowerDesignators.Add(CmpName+';'+PinName+';'+PinDesignator);
+                PowerDesignators.Add(CmpName+';'+PinDesignator+';');
             end;
             pin := Iterator.NextSchObject;
         End;
@@ -66,12 +65,12 @@ Begin
     result := SheetPwr;
 End;
 
-function GetCmpPwrNets(Cmp: IPCB_Component, PinName: String, PinDesignator: String): TStringList;
+function GetCmpPwrNets(Cmp: IPCB_Component, PwrPins: TStringList): TStringList;
 var
     PwrNets: TStringList;
     Iterator: IPCB_GroupIterator;
     pad: IPCB_Pad;
-    cmpName, padName, pinDesc, tmp1, tmp2, tmp3, tmp4: String;
+    cmpName, padName, pinDesc, padDesignator: String;
 begin
     PwrNets := TStringList.Create;
     PwrNets.Sorted := True;
@@ -86,17 +85,11 @@ begin
     while pad <> nil do
     begin
         padName := pad.Name;
-        tmp1 := pad.Descriptor;
-        tmp2 := pad.Detail;
-        tmp3 := pad.Identifier;
-        tmp4 := pad.PinDescriptor;
-        pinDesc := cmpName + '-' + PinDesignator;
-        if pad.Identifier = pinDesc then
+        padDesignator := pad.PinDescriptor;
+        // If CmpName;PadName; string in PwrPins TStringList
+        if (pad.Net <> nil) and (PwrPins.IndexOf(cmpName+';'+padName+';') <> -1) then
         begin
-            if pad.Net <> nil then
-            begin
-                PwrNets.Add(pad.Net.Name);
-            end;
+            PwrNets.Add(pad.Net.Name);
         end;
         pad := Iterator.NextPCBObject;
     end;
@@ -107,7 +100,7 @@ function GetPwrPinNets(Board: IPCB_Board, PwrPins: TStringList): TStringList;
 var
     i, j: Integer;
     PwrNets, SplitDelimited: TStringList;
-    CmpName, PinName, PinDesignator: String;
+    CmpName, PrevName, PinName, PinDesignator: String;
     Cmp: IPCB_Component;
     CmpPwrNets: TStringList;
 begin
@@ -120,20 +113,24 @@ begin
     SplitDelimited.Delimiter := ';';
     SplitDelimited.StrictDelimiter := True;
 
+    PrevName := '';
     for i:=0 to PwrPins.Count-1 do
     begin
         SplitDelimited.DelimitedText := PwrPins.Get(i);
         CmpName := SplitDelimited.Get(0);
-        PinName := SplitDelimited.Get(1);
-        PinDesignator := SplitDelimited.Get(2);
+        //PinDesignator := SplitDelimited.Get(1);
+        //PinName := SplitDelimited.Get(2);
 
+        if CmpName = PrevName then continue;
         Cmp := Board.GetPcbComponentByRefDes(CmpName);
         if Cmp = nil then continue;
-        CmpPwrNets := GetCmpPwrNets(Cmp, PinName, PinDesignator);
+        CmpPwrNets := GetCmpPwrNets(Cmp, PwrPins);
         for j:=0 to CmpPwrNets.Count-1 do
         begin
             PwrNets.Add(CmpPwrNets.Get(j));
         end;
+
+        PrevName := CmpName;
     end;
     result := PwrNets;
 end;
